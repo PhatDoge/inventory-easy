@@ -1,23 +1,29 @@
 import { api } from "@/convex/_generated/api";
 import { useAction, useQuery } from "convex/react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 export function Dashboard() {
   const products = useQuery(api.products.list, {}) || [];
   const lowStockProducts = useQuery(api.products.getLowStockProducts) || [];
 
+  // Fix: Memoize the date calculations to prevent infinite re-renders
+  const dateRange = useMemo(() => {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const endDate = Date.now();
+    return { startDate: thirtyDaysAgo, endDate };
+  }, []); // Empty dependency array means this only calculates once
+
   // Get recent sales analytics (last 30 days)
-  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const salesAnalytics = useQuery(api.sales.getSalesAnalytics, {
-    startDate: thirtyDaysAgo,
-    endDate: Date.now(),
+    startDate: dateRange.startDate,
+    endDate: dateRange.endDate,
   });
 
   const topProducts =
     useQuery(api.sales.getTopSellingProducts, {
-      startDate: thirtyDaysAgo,
-      endDate: Date.now(),
-      limit: 5,
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate,
+      limit: 10,
     }) || [];
 
   const generateForecasts = useAction(api.forecasting.generateForecasts);

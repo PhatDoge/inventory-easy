@@ -5,8 +5,8 @@ import { SignInForm } from "@/components/SignInForm";
 import { Dashboard } from "@/components/Dashboard";
 
 // TODO: Uncomment these component imports as you implement them
-// import { ProductCatalog } from "@/components/ProductCatalog";
-// import { SalesTracking } from "@/components/SalesTracking";
+import { ProductCatalog } from "@/components/ProductCatalog";
+import { SalesTracking } from "@/components/SalesTracking";
 // import { ForecastingDashboard } from "@/components/ForecastingDashboard";
 // import { ReorderManagement } from "@/components/ReorderManagement";
 // import { Analytics } from "@/components/Analytics";
@@ -105,34 +105,39 @@ export default function App() {
           {activeTab === "dashboard" && <Dashboard />}
 
           {/* TODO: Uncomment and use these components as you implement them */}
-          {/* {activeTab === "products" && <ProductCatalog />} */}
-          {/* {activeTab === "sales" && <SalesTracking />} */}
+          {activeTab === "products" && <ProductCatalog />}
+          {activeTab === "sales" && <SalesTracking />}
           {/* {activeTab === "forecasting" && <ForecastingDashboard />} */}
           {/* {activeTab === "reorders" && <ReorderManagement />} */}
           {/* {activeTab === "analytics" && <Analytics />} */}
 
           {/* Placeholder content for tabs without components yet */}
-          {activeTab !== "dashboard" && (
-            <div className="bg-white shadow-lg rounded-xl p-8 border border-gray-200/80">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">
-                {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Section
-              </h2>
-              <p className="text-gray-600">
-                This section is under development. Uncomment the component
-                import and JSX when ready.
-              </p>
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-500">To enable this section:</p>
-                <ol className="text-xs text-gray-700 mt-2 space-y-1">
-                  <li>1. Uncomment the import at the top of the file</li>
-                  <li>
-                    2. Uncomment the corresponding JSX in the main section
-                  </li>
-                  <li>3. Remove this placeholder div</li>
-                </ol>
+          {activeTab !== "dashboard" &&
+            activeTab !== "products" &&
+            activeTab !== "sales" && (
+              <div className="bg-white shadow-lg rounded-xl p-8 border border-gray-200/80">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">
+                  {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}{" "}
+                  Section
+                </h2>
+                <p className="text-gray-600">
+                  This section is under development. Uncomment the component
+                  import and JSX when ready.
+                </p>
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-500">
+                    To enable this section:
+                  </p>
+                  <ol className="text-xs text-gray-700 mt-2 space-y-1">
+                    <li>1. Uncomment the import at the top of the file</li>
+                    <li>
+                      2. Uncomment the corresponding JSX in the main section
+                    </li>
+                    <li>3. Remove this placeholder div</li>
+                  </ol>
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
       </main>
     </div>
