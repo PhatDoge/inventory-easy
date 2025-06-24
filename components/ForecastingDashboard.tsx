@@ -12,10 +12,28 @@ export function ForecastingDashboard() {
   const handleGenerateForecasts = async () => {
     setIsGenerating(true);
     try {
-      await generateForecasts({});
-      toast.success("Forecasts generated successfully!");
+      const result = await generateForecasts({});
+      // Detailed feedback based on the result from the action
+      if (result.successCount > 0) {
+        toast.success(result.message);
+      } else if (result.skippedForNoDataCount > 0 && result.errorCount === 0) {
+        toast.info(result.message); // Use info for skips without errors
+      } else if (result.errorCount > 0) {
+        toast.error(result.message);
+      } else if (!result.success && result.message) {
+        // Catch-all for other non-successful scenarios with a message
+        toast.warning(result.message);
+      } else {
+        // Fallback if the message structure is unexpected (should not happen with current backend logic)
+        toast("Forecast generation process completed.");
+      }
     } catch (error) {
-      toast.error("Failed to generate forecasts: " + (error as Error).message);
+      // This catch block handles errors from the useAction hook itself (e.g., network issues, Convex system errors)
+      console.error("Error calling generateForecasts action:", error);
+      toast.error(
+        "Failed to generate forecasts: " +
+          (error instanceof Error ? error.message : String(error))
+      );
     } finally {
       setIsGenerating(false);
     }

@@ -7,30 +7,35 @@ import {
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
-// Helper function to get the current user from Clerk
-const getCurrentUser = async (ctx: any) => {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
-    throw new Error("Not authenticated");
-  }
+// Internal query to get the current user
+export const getCurrentUser = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
 
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-    .first();
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
 
-  if (!user) {
-    throw new Error("User not found");
-  }
+    if (!user) {
+      throw new Error("User not found");
+    }
 
-  return user;
-};
+    return user;
+  },
+});
 
 // Generate demand forecasts for user's products
 export const generateForecasts = action({
   args: {},
   handler: async (ctx) => {
-    const user = await getCurrentUser(ctx);
+    console.log("Starting generateForecasts action...");
+    const user = await ctx.runQuery(internal.forecasting.getCurrentUser, {});
+    console.log("User fetched:", user?._id);
 
     // Get all active products for this user
     const products = await ctx.runQuery(
@@ -39,11 +44,27 @@ export const generateForecasts = action({
         userId: user._id,
       }
     );
+    console.log(
+      "Products fetched for user:",
+      products.map((p) => p._id).join(", ") || "No products found"
+    );
+
+    if (!products || products.length === 0) {
+      console.log("No active products found for this user. Exiting.");
+      return {
+        success: true,
+        message: "No active products found to forecast.",
+        successCount: 0,
+        errorCount: 0,
+      };
+    }
 
     let successCount = 0;
     let errorCount = 0;
+    let skippedForNoDataCount = 0; // Initialize counter for skipped products
 
     for (const product of products) {
+      console.log(`Processing product ID: ${product._id}`);
       try {
         // Get historical sales data
         const salesData = await ctx.runQuery(
@@ -52,38 +73,88 @@ export const generateForecasts = action({
             productId: product._id,
           }
         );
+        console.log(
+          `Sales data length for product ${product._id}: ${salesData.length}`
+        );
 
         if (salesData.length < 7) {
+          console.log(
+            `Skipping product ${product._id}: Not enough sales data (found ${salesData.length}, need 7).`
+          );
+          skippedForNoDataCount++; // Increment skipped counter
           // Not enough data for forecasting
           continue;
         }
 
         // Generate forecast using simple linear regression with seasonal adjustment
+        console.log(`Generating forecast for product ${product._id}...`);
         const forecast = await generateSimpleForecast(salesData);
+        console.log(
+          `Forecast generated for product ${product._id}:`,
+          JSON.stringify(forecast)
+        );
 
         // Save forecast to database
-        await ctx.runMutation(internal.forecasting.saveForecast, {
-          productId: product._id,
-          predictedDemand: forecast.predictedDemand,
-          confidence: forecast.confidence,
-          seasonalFactor: forecast.seasonalFactor,
-          trendFactor: forecast.trendFactor,
-          algorithm: "linear_regression_seasonal",
-          createdBy: user._id,
-        });
+        console.log(
+          `Attempting to save forecast for product ${product._id}...`
+        );
+        const saveResult = await ctx.runMutation(
+          internal.forecasting.saveForecast,
+          {
+            // Capture result
+            productId: product._id,
+            predictedDemand: forecast.predictedDemand,
+            confidence: forecast.confidence,
+            seasonalFactor: forecast.seasonalFactor,
+            trendFactor: forecast.trendFactor,
+            algorithm: "linear_regression_seasonal",
+            createdBy: user._id,
+          }
+        );
+        console.log(
+          `Forecast saved for product ${product._id}. Mutation result:`,
+          JSON.stringify(saveResult)
+        );
 
         successCount++;
       } catch (error) {
-        console.error(`Error forecasting for product ${product._id}:`, error);
+        console.error(
+          `Error forecasting for product ${product._id}:`,
+          error instanceof Error ? error.message : String(error)
+        );
+        if (error instanceof Error && error.stack) {
+          console.error("Stack trace:", error.stack);
+        }
         errorCount++;
       }
     }
 
+    console.log(
+      `Forecast generation complete. Success count: ${successCount}, Error count: ${errorCount}, Skipped (no data): ${skippedForNoDataCount}`
+    );
+
+    let message = "";
+    if (successCount > 0 && errorCount === 0 && skippedForNoDataCount === 0) {
+      message = `Successfully generated forecasts for ${successCount} product(s).`;
+    } else if (successCount > 0) {
+      message = `Generated forecasts for ${successCount} product(s). ${errorCount > 0 ? `${errorCount} failed. ` : ""}${skippedForNoDataCount > 0 ? `${skippedForNoDataCount} skipped (insufficient data).` : ""}`;
+    } else if (errorCount > 0) {
+      message = `Failed to generate forecasts for ${errorCount} product(s). ${skippedForNoDataCount > 0 ? `${skippedForNoDataCount} more skipped (insufficient data).` : ""}`;
+    } else if (skippedForNoDataCount > 0) {
+      message = `No forecasts generated. ${skippedForNoDataCount} product(s) skipped due to insufficient sales data (need at least 7 data points).`;
+    } else {
+      // This case should ideally be caught by the "No active products found" check earlier
+      message = "No forecasts were generated. No products processed.";
+    }
+
     return {
-      success: true,
-      message: `Forecasts generated successfully. ${successCount} succeeded, ${errorCount} failed.`,
+      success:
+        successCount > 0 ||
+        (successCount === 0 && errorCount === 0 && skippedForNoDataCount === 0), // Consider it a "success" if no errors, even if some/all skipped
+      message,
       successCount,
       errorCount,
+      skippedForNoDataCount, // Add to return object
     };
   },
 });
@@ -95,7 +166,7 @@ export const getUserForecasts = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const user = await getCurrentUser(ctx);
+    const user = await ctx.runQuery(internal.forecasting.getCurrentUser, {});
 
     // Get user's products
     const userProducts = await ctx.db

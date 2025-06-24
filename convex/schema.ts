@@ -80,6 +80,7 @@ const applicationTables = {
     trendFactor: v.number(),
     algorithm: v.string(), // "linear_regression", "arima", "seasonal_decomposition"
     createdAt: v.number(),
+    createdBy: v.id("users"),
   })
     .index("by_product", ["productId"])
     .index("by_forecast_date", ["forecastDate"])

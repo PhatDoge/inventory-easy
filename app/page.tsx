@@ -8,7 +8,7 @@ import { Dashboard } from "@/components/Dashboard";
 import { ProductCatalog } from "@/components/ProductCatalog";
 import { SalesTracking } from "@/components/SalesTracking";
 import { ForecastingDashboard } from "@/components/ForecastingDashboard";
-// import { ReorderManagement } from "@/components/ReorderManagement";
+import { ReorderManagement } from "@/components/ReorderManagement";
 // import { Analytics } from "@/components/Analytics";
 
 export default function App() {
@@ -108,12 +108,13 @@ export default function App() {
           {activeTab === "products" && <ProductCatalog />}
           {activeTab === "sales" && <SalesTracking />}
           {activeTab === "forecasting" && <ForecastingDashboard />}
-          {/* {activeTab === "reorders" && <ReorderManagement />} */}
+          {activeTab === "reorders" && <ReorderManagement />}
           {/* {activeTab === "analytics" && <Analytics />} */}
 
           {/* Placeholder content for tabs without components yet */}
           {activeTab !== "dashboard" &&
             activeTab !== "forecasting" &&
+            activeTab !== "reorders" &&
             activeTab !== "products" &&
             activeTab !== "sales" && (
               <div className="bg-white shadow-lg rounded-xl p-8 border border-gray-200/80">
