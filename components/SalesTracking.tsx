@@ -10,16 +10,17 @@ export function SalesTracking() {
   const [unitPrice, setUnitPrice] = useState(0);
   const [channel, setChannel] = useState("store");
   const [customerId, setCustomerId] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0); // State to trigger refresh
 
   const products = useQuery(api.products.list, {}) || [];
   const recordSale = useMutation(api.sales.recordSale);
 
-  // Fix: Use useMemo to calculate dates only once per render cycle
+  // Calculate dateRange, re-calculate when refreshKey changes
   const dateRange = useMemo(() => {
     const endDate = Date.now();
-    const startDate = endDate - 30 * 24 * 60 * 60 * 1000;
+    const startDate = endDate - 30 * 24 * 60 * 60 * 1000; // 30 days ago
     return { startDate, endDate };
-  }, []); // Empty dependency array means this only calculates once
+  }, [refreshKey]); // Dependency array includes refreshKey
 
   const salesAnalytics = useQuery(api.sales.getSalesAnalytics, {
     startDate: dateRange.startDate,
@@ -57,9 +58,10 @@ export function SalesTracking() {
       setQuantity(1);
       setUnitPrice(0);
       setCustomerId("");
+      setRefreshKey((prevKey) => prevKey + 1); // Increment refreshKey to trigger dateRange recalculation
 
       // The queries will automatically update due to Convex's reactivity
-      // No need for manual revalidation
+      // when dateRange (a query dependency) changes.
     } catch (error) {
       toast.error("Failed to record sale: " + (error as Error).message);
     }

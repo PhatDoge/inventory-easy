@@ -7,7 +7,7 @@ import { Dashboard } from "@/components/Dashboard";
 // TODO: Uncomment these component imports as you implement them
 import { ProductCatalog } from "@/components/ProductCatalog";
 import { SalesTracking } from "@/components/SalesTracking";
-// import { ForecastingDashboard } from "@/components/ForecastingDashboard";
+import { ForecastingDashboard } from "@/components/ForecastingDashboard";
 // import { ReorderManagement } from "@/components/ReorderManagement";
 // import { Analytics } from "@/components/Analytics";
 
@@ -107,12 +107,13 @@ export default function App() {
           {/* TODO: Uncomment and use these components as you implement them */}
           {activeTab === "products" && <ProductCatalog />}
           {activeTab === "sales" && <SalesTracking />}
-          {/* {activeTab === "forecasting" && <ForecastingDashboard />} */}
+          {activeTab === "forecasting" && <ForecastingDashboard />}
           {/* {activeTab === "reorders" && <ReorderManagement />} */}
           {/* {activeTab === "analytics" && <Analytics />} */}
 
           {/* Placeholder content for tabs without components yet */}
           {activeTab !== "dashboard" &&
+            activeTab !== "forecasting" &&
             activeTab !== "products" &&
             activeTab !== "sales" && (
               <div className="bg-white shadow-lg rounded-xl p-8 border border-gray-200/80">
