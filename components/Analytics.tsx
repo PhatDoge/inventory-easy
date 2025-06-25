@@ -2,8 +2,9 @@
 import { api } from "@/convex/_generated/api";
 import { useAction, useQuery } from "convex/react"; // Added useAction
 import { useState, useMemo } from "react";
-import { toast } from "sonner"; // Added for toast notifications
-import { AIReportModal } from "./AIReportModal"; // Assuming this is the path
+import { toast } from "sonner";
+import { AIReportModal } from "./AIReportModal";
+import { AIReportList } from "./AIReportList"; // Import the new component
 
 export function Analytics() {
   const [dateRange, setDateRange] = useState("30");
@@ -542,6 +543,9 @@ export function Analytics() {
           }}
         />
       )}
+
+      {/* Render the AIReportList component */}
+      <AIReportList />
     </div>
   );
 }

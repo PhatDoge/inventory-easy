@@ -1,8 +1,9 @@
 "use Convex/server";
 
-import { action } from "./_generated/server";
+import { action, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import OpenAI from "openai";
+import { api, internal } from "./_generated/api";
 
 // Interface for the analytics data passed to the action
 interface AnalyticsData {
@@ -92,7 +93,6 @@ export const generateAnalyticsReport = action({
       analyticsData.dailySalesData.length > 0
     ) {
       prompt += `Sales Trend Summary:\n`;
-      // Basic summary, could be more detailed if needed
       const firstDayRevenue = analyticsData.dailySalesData[0].revenue;
       const lastDayRevenue =
         analyticsData.dailySalesData[analyticsData.dailySalesData.length - 1]
@@ -118,7 +118,6 @@ export const generateAnalyticsReport = action({
     if (analyticsData.topProducts && analyticsData.topProducts.length > 0) {
       prompt += `Top Selling Products:\n`;
       analyticsData.topProducts.slice(0, 3).forEach((p) => {
-        // Limiting to top 3 for prompt brevity
         prompt += `- ${p.name || "Unknown Product"}: ${p.quantity} units, $${p.revenue.toFixed(2)} revenue\n`;
       });
       prompt += `\n`;
@@ -136,9 +135,10 @@ export const generateAnalyticsReport = action({
 4.  Any actionable recommendations if obvious from the data.
 Keep the report professional, clear, and easy to understand for a business owner. Aim for 3-5 key paragraphs.`;
 
+    let reportContent = "";
     try {
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o", // Specify the model
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -147,16 +147,15 @@ Keep the report professional, clear, and easy to understand for a business owner
           },
           { role: "user", content: prompt },
         ],
-        max_tokens: 500, // Adjust as needed
+        max_tokens: 700, // Increased max_tokens for potentially longer reports
       });
 
-      const report = completion.choices[0]?.message?.content;
-      if (!report) {
+      reportContent = completion.choices[0]?.message?.content || "";
+      if (!reportContent) {
         throw new Error(
           "OpenAI response was empty or in an unexpected format."
         );
       }
-      return report;
     } catch (error) {
       console.error("OpenAI API call failed:", error);
       if (error instanceof OpenAI.APIError) {
@@ -168,5 +167,94 @@ Keep the report professional, clear, and easy to understand for a business owner
         "Failed to generate AI report due to an issue with the OpenAI API call."
       );
     }
+
+    // Save the report to the database
+    const user = await ctx.auth.getUserIdentity();
+    if (!user) {
+      throw new Error("User not authenticated.");
+    }
+
+    // Get the full user document to get the user's _id
+    const userDoc = await ctx.runQuery(api.users.getMyUserDoc, {});
+    if (!userDoc) {
+      throw new Error("User document not found.");
+    }
+
+    const now = new Date();
+    const reportName = `AI Report - ${now.getFullYear()}-${(now.getMonth() + 1)
+      .toString()
+      .padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")} ${now
+      .getHours()
+      .toString()
+      .padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+
+    await ctx.runMutation(internal.aiReports.saveReport, {
+      reportName,
+      reportContent,
+      generatedAt: Date.now(),
+      userId: userDoc._id,
+      filters: {
+        dateRange: analyticsData.dateRange,
+        selectedProduct: analyticsData.selectedProduct,
+      },
+    });
+
+    return reportContent; // Return the content for immediate display as before
+  },
+});
+
+// Internal mutation to save the report
+export const saveReport = internalMutation({
+  args: {
+    reportName: v.string(),
+    reportContent: v.string(),
+    generatedAt: v.number(),
+    userId: v.id("users"),
+    filters: v.object({
+      dateRange: v.string(),
+      selectedProduct: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("aiReports", {
+      reportName: args.reportName,
+      reportContent: args.reportContent,
+      generatedAt: args.generatedAt,
+      userId: args.userId,
+      filters: args.filters,
+    });
+  },
+});
+
+// Query to get reports for the current user
+import { query } from "./_generated/server";
+
+export const getReportsForCurrentUser = query({
+  handler: async (ctx) => {
+    const user = await ctx.auth.getUserIdentity();
+    if (!user) {
+      // Not throwing an error, but returning an empty array or null
+      // because the UI should handle the "not logged in" state gracefully.
+      // Alternatively, throw an error if reports should strictly only be fetched by logged-in users.
+      return [];
+    }
+
+    // Get the full user document to get the user's _id
+    const userDoc = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", user.subject))
+      .unique();
+
+    if (!userDoc) {
+      // This case should ideally not happen if users are synced correctly
+      console.warn("User document not found for clerkId:", user.subject);
+      return [];
+    }
+
+    return await ctx.db
+      .query("aiReports")
+      .withIndex("by_user_and_time", (q) => q.eq("userId", userDoc._id))
+      .order("desc") // Show newest reports first
+      .collect();
   },
 });

@@ -130,6 +130,21 @@ const applicationTables = {
     stockoutCostPercentage: v.number(),
     carryingCostPercentage: v.number(),
   }).index("by_user", ["userId"]),
+
+  // AI generated analytics reports
+  aiReports: defineTable({
+    reportName: v.string(),
+    reportContent: v.string(),
+    generatedAt: v.number(),
+    userId: v.id("users"), // Reference to the users table
+    filters: v.object({
+      dateRange: v.string(),
+      selectedProduct: v.optional(v.string()), // Product ID or name, consistent with how it's used
+      // Add any other relevant filters used for generating the report
+    }),
+  })
+    .index("by_user_and_time", ["userId", "generatedAt"])
+    .index("by_user", ["userId"]),
 };
 
 export default defineSchema({
