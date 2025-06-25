@@ -9,7 +9,7 @@ import { ProductCatalog } from "@/components/ProductCatalog";
 import { SalesTracking } from "@/components/SalesTracking";
 import { ForecastingDashboard } from "@/components/ForecastingDashboard";
 import { ReorderManagement } from "@/components/ReorderManagement";
-// import { Analytics } from "@/components/Analytics";
+import { Analytics } from "@/components/Analytics";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -109,11 +109,12 @@ export default function App() {
           {activeTab === "sales" && <SalesTracking />}
           {activeTab === "forecasting" && <ForecastingDashboard />}
           {activeTab === "reorders" && <ReorderManagement />}
-          {/* {activeTab === "analytics" && <Analytics />} */}
+          {activeTab === "analytics" && <Analytics />}
 
           {/* Placeholder content for tabs without components yet */}
-          {activeTab !== "dashboard" &&
+          {/* {activeTab !== "dashboard" &&
             activeTab !== "forecasting" &&
+            activeTab !== "analytics" &&
             activeTab !== "reorders" &&
             activeTab !== "products" &&
             activeTab !== "sales" && (
@@ -139,7 +140,7 @@ export default function App() {
                   </ol>
                 </div>
               </div>
-            )}
+            )} */}
         </div>
       </main>
     </div>
