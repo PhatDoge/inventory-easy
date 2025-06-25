@@ -5,6 +5,8 @@ import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { AIReportModal } from "./AIReportModal";
 import { AIReportList } from "./AIReportList"; // Import the new component
+import { DailySalesChart } from "./DailySalesChart"; // Import new chart component
+import { SalesByChannelChart } from "./SalesByChannelChart"; // Import new chart component
 
 export function Analytics() {
   const [dateRange, setDateRange] = useState("30");
@@ -84,10 +86,6 @@ export function Analytics() {
     return Object.entries(salesAnalytics.dailySales)
       .map(([date, data]) => ({
         date: date,
-        // Assuming 'data' object has 'quantity' and 'revenue' based on the error log's 'Value'
-        // The error log showed: ["2025-06-24", {orders: 7.0, quantity: 24.0, revenue: 5180.0}]
-        // So, data.quantity and data.revenue should exist.
-        // Ensure these are numbers, cast if necessary, or handle potential undefined if structure varies.
         quantity:
           typeof (data as any).quantity === "number" ?
             (data as any).quantity
@@ -95,9 +93,21 @@ export function Analytics() {
         revenue:
           typeof (data as any).revenue === "number" ? (data as any).revenue : 0,
       }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .slice(-30);
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    // Removed slice(-30) here as Recharts can handle more data points,
+    // and filtering by date range is already applied.
+    // We might re-introduce a limit later if performance becomes an issue with very large datasets.
   }, [salesAnalytics?.dailySales]);
+
+  const channelChartData = useMemo(() => {
+    if (!salesAnalytics?.channelBreakdown) return [];
+    return Object.entries(salesAnalytics.channelBreakdown)
+      .map(([name, revenue]) => ({
+        name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize channel name
+        revenue: revenue as number,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [salesAnalytics?.channelBreakdown]);
 
   // Memoize inventory calculations
   const inventoryMetrics = useMemo(() => {
@@ -359,40 +369,7 @@ export function Analytics() {
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
             📈 Daily Sales Trend
           </h2>
-          {dailySalesData.length > 0 ?
-            <div className="space-y-2">
-              {dailySalesData.slice(-10).map((item) => {
-                const maxRevenue = Math.max(
-                  ...dailySalesData.map((d) => d.revenue)
-                );
-                const percentage =
-                  maxRevenue > 0 ? (item.revenue / maxRevenue) * 100 : 0;
-
-                return (
-                  <div key={item.date} className="flex items-center space-x-3">
-                    <div className="w-20 text-xs text-gray-600">
-                      {new Date(item.date).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </div>
-                    <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
-                      <div
-                        className="bg-blue-500 h-4 rounded-full transition-all duration-300"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                    <div className="w-16 text-xs text-right font-medium">
-                      ${item.revenue.toFixed(0)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          : <p className="text-gray-500">
-              No sales data available for the selected period
-            </p>
-          }
+          <DailySalesChart data={dailySalesData} />
         </div>
 
         {/* Channel Performance */}
@@ -400,40 +377,7 @@ export function Analytics() {
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
             🎯 Sales by Channel
           </h2>
-          {salesAnalytics?.channelBreakdown ?
-            <div className="space-y-4">
-              {Object.entries(salesAnalytics.channelBreakdown)
-                .sort(([, a], [, b]) => (b as number) - (a as number))
-                .map(([channel, revenue]) => {
-                  const totalRevenue = salesAnalytics.totalRevenue || 1;
-                  const percentage = ((revenue as number) / totalRevenue) * 100;
-
-                  return (
-                    <div key={channel} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="capitalize font-medium text-gray-900">
-                          {channel}
-                        </span>
-                        <div className="text-right">
-                          <span className="font-semibold">
-                            ${(revenue as number).toFixed(2)}
-                          </span>
-                          <span className="text-sm text-gray-500 ml-2">
-                            ({percentage.toFixed(1)}%)
-                          </span>
-                        </div>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-          : <p className="text-gray-500">No channel data available</p>}
+          <SalesByChannelChart data={channelChartData} />
         </div>
       </div>
 
