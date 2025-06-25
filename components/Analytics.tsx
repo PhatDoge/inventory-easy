@@ -1,341 +1,17 @@
 import { api } from "@/convex/_generated/api";
-import { useQuery, useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react"; // Added useAction
 import { useState, useMemo } from "react";
-import { toast } from "sonner";
-
-// Define the structure for the AI report modal (can be moved to a separate file if it grows)
-interface AIReportModalProps {
-  report: string;
-  onClose: () => void;
-}
-
-function AIReportModal({ report, onClose }: AIReportModalProps) {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-gray-900">
-            AI Generated Report
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            &times; {/* Simple X close button */}
-          </button>
-        </div>
-        <div className="whitespace-pre-wrap text-gray-700 text-sm">
-          {report}
-        </div>
-        <div className="mt-6 text-right">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-
-      {/* Key Metrics with Growth */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900">
-                ${salesAnalytics?.totalRevenue?.toFixed(2) || "0.00"}
-              </p>
-            </div>
-            <div className="text-2xl">💰</div>
-          </div>
-          <div className="mt-2">
-            <span
-              className={`text-sm font-medium ${
-                growthMetrics.revenueGrowth >= 0 ?
-                  "text-green-600"
-                : "text-red-600"
-              }`}
-            >
-              {growthMetrics.revenueGrowth >= 0 ? "↗" : "↘"}{" "}
-              {Math.abs(growthMetrics.revenueGrowth).toFixed(1)}%
-            </span>
-            <span className="text-sm text-gray-500 ml-1">
-              vs previous period
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Units Sold</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {salesAnalytics?.totalQuantity || 0}
-              </p>
-            </div>
-            <div className="text-2xl">📦</div>
-          </div>
-          <div className="mt-2">
-            <span
-              className={`text-sm font-medium ${
-                growthMetrics.quantityGrowth >= 0 ?
-                  "text-green-600"
-                : "text-red-600"
-              }`}
-            >
-              {growthMetrics.quantityGrowth >= 0 ? "↗" : "↘"}{" "}
-              {Math.abs(growthMetrics.quantityGrowth).toFixed(1)}%
-            </span>
-            <span className="text-sm text-gray-500 ml-1">
-              vs previous period
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Orders</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {salesAnalytics?.totalOrders || 0}
-              </p>
-            </div>
-            <div className="text-2xl">🛒</div>
-          </div>
-          <div className="mt-2">
-            <span className="text-sm text-gray-500">
-              {Math.round(
-                ((salesAnalytics?.totalOrders || 0) / dateParams.daysAgo) * 10
-              ) / 10}{" "}
-              orders/day avg
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                Avg Order Value
-              </p>
-              <p className="text-2xl font-bold text-gray-900">
-                ${salesAnalytics?.averageOrderValue?.toFixed(2) || "0.00"}
-              </p>
-            </div>
-            <div className="text-2xl">📊</div>
-          </div>
-          <div className="mt-2">
-            <span className="text-sm text-gray-500">
-              Per transaction average
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Sales Trend Chart */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            📈 Daily Sales Trend
-          </h2>
-          {dailySalesData.length > 0 ?
-            <div className="space-y-2">
-              {dailySalesData.slice(-10).map(([date, data]) => {
-                const maxRevenue = Math.max(
-                  ...dailySalesData.map(([, d]) => (d as any).revenue)
-                );
-                const percentage =
-                  maxRevenue > 0 ?
-                    ((data as any).revenue / maxRevenue) * 100
-                  : 0;
-
-                return (
-                  <div key={date} className="flex items-center space-x-3">
-                    <div className="w-20 text-xs text-gray-600">
-                      {new Date(date).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </div>
-                    <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
-                      <div
-                        className="bg-blue-500 h-4 rounded-full transition-all duration-300"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                    <div className="w-16 text-xs text-right font-medium">
-                      ${(data as any).revenue.toFixed(0)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          : <p className="text-gray-500">
-              No sales data available for the selected period
-            </p>
-          }
-        </div>
-
-        {/* Channel Performance */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            🎯 Sales by Channel
-          </h2>
-          {salesAnalytics?.channelBreakdown ?
-            <div className="space-y-4">
-              {Object.entries(salesAnalytics.channelBreakdown)
-                .sort(([, a], [, b]) => (b as number) - (a as number))
-                .map(([channel, revenue]) => {
-                  const totalRevenue = salesAnalytics.totalRevenue || 1;
-                  const percentage = ((revenue as number) / totalRevenue) * 100;
-
-                  return (
-                    <div key={channel} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="capitalize font-medium text-gray-900">
-                          {channel}
-                        </span>
-                        <div className="text-right">
-                          <span className="font-semibold">
-                            ${(revenue as number).toFixed(2)}
-                          </span>
-                          <span className="text-sm text-gray-500 ml-2">
-                            ({percentage.toFixed(1)}%)
-                          </span>
-                        </div>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-          : <p className="text-gray-500">No channel data available</p>}
-        </div>
-      </div>
-
-      {/* Top Products Performance */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          🏆 Product Performance
-        </h2>
-        {topProducts.length > 0 ?
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-2">Rank</th>
-                  <th className="text-left py-3 px-2">Product</th>
-                  <th className="text-left py-3 px-2">Units Sold</th>
-                  <th className="text-left py-3 px-2">Revenue</th>
-                  <th className="text-left py-3 px-2">Orders</th>
-                  <th className="text-left py-3 px-2">Avg Order Size</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topProducts.map((item, index) => (
-                  <tr
-                    key={item.productId}
-                    className="border-b hover:bg-gray-50"
-                  >
-                    <td className="py-3 px-2">
-                      <span className="font-bold text-blue-600">
-                        #{index + 1}
-                      </span>
-                    </td>
-                    <td className="py-3 px-2">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {item.product?.name}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {item.product?.sku}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="py-3 px-2 font-medium">
-                      {item.totalQuantity}
-                    </td>
-                    <td className="py-3 px-2 font-medium text-green-600">
-                      ${item.totalRevenue.toFixed(2)}
-                    </td>
-                    <td className="py-3 px-2">{item.orderCount}</td>
-                    <td className="py-3 px-2">
-                      {(item.totalQuantity / item.orderCount).toFixed(1)} units
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        : <div className="text-center py-8">
-            <div className="text-4xl mb-4">📊</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              No sales data
-            </h3>
-            <p className="text-gray-600">
-              Start recording sales to see analytics and insights
-            </p>
-          </div>
-        }
-      </div>
-
-      {/* Inventory Insights */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          📦 Inventory Insights
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="text-center p-4 bg-blue-50 rounded-lg">
-            <div className="text-2xl mb-2">📈</div>
-            <p className="text-sm text-gray-600">Total Products</p>
-            <p className="text-xl font-bold text-blue-600">{products.length}</p>
-          </div>
-
-          <div className="text-center p-4 bg-yellow-50 rounded-lg">
-            <div className="text-2xl mb-2">⚠️</div>
-            <p className="text-sm text-gray-600">Low Stock Items</p>
-            <p className="text-xl font-bold text-yellow-600">
-              {inventoryMetrics.lowStockCount}
-            </p>
-          </div>
-
-          <div className="text-center p-4 bg-green-50 rounded-lg">
-            <div className="text-2xl mb-2">💰</div>
-            <p className="text-sm text-gray-600">Total Inventory Value</p>
-            <p className="text-xl font-bold text-green-600">
-              ${inventoryMetrics.totalInventoryValue.toFixed(2)}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {showReportModal && aiReport && (
-        <AIReportModal
-          report={aiReport}
-          onClose={() => {
-            setShowReportModal(false);
-            // Optionally clear the report from state if you don't want to cache it while modal is closed
-            // setAiReport(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
+import { toast } from "sonner"; // Added for toast notifications
+import { AIReportModal } from "./AIReportModal"; // Assuming this is the path
 
 export function Analytics() {
   const [dateRange, setDateRange] = useState("30");
   const [selectedProductState, setSelectedProductState] = useState(""); // Renamed to avoid conflict
 
+  // ADD THESE MISSING STATE DECLARATIONS
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [aiReport, setAiReport] = useState<string | null>(null);
-  const [showReportModal, setShowReportModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false); // This was missing!
 
   const products = useQuery(api.products.list, {}) || [];
   const generateReportAction = useAction(api.aiReports.generateAnalyticsReport);
@@ -352,7 +28,7 @@ export function Analytics() {
       startDate,
       endDate,
       previousStartDate,
-      productId: selectedProductState || undefined,
+      productId: selectedProductState || undefined, // Updated to selectedProductState
     };
   }, [dateRange, selectedProductState]);
 
@@ -427,51 +103,45 @@ export function Analytics() {
       );
       return;
     }
+
     setIsGeneratingReport(true);
     setAiReport(null);
+    setShowReportModal(false); // Reset modal state
 
-    const dateRangeTextMap: { [key: string]: string } = {
-      "7": "Last 7 days",
-      "30": "Last 30 days",
-      "90": "Last 90 days",
-      "365": "Last year",
-    };
-
-    const selectedProductDetails = products.find(
-      (p) => p._id === selectedProductState
-    );
-
+    // Prepare data for the report
     const dataForReport = {
-      dateRange: dateRangeTextMap[dateRange] || `Custom (${dateRange} days)`,
-      selectedProduct: selectedProductDetails?.name || "All Products",
-      totalRevenue: salesAnalytics.totalRevenue || 0,
-      revenueGrowth: growthMetrics.revenueGrowth || 0,
-      totalQuantity: salesAnalytics.totalQuantity || 0,
-      quantityGrowth: growthMetrics.quantityGrowth || 0,
-      totalOrders: salesAnalytics.totalOrders || 0,
-      averageOrderValue: salesAnalytics.averageOrderValue || 0,
-      dailySalesData: dailySalesData.map(([date, data]) => ({
-        date,
-        revenue: (data as any).revenue || 0,
-        quantity: (data as any).quantity || 0, // Assuming quantity is available, adjust if not
-      })),
+      currentPeriod: {
+        totalRevenue: salesAnalytics.totalRevenue,
+        totalQuantity: salesAnalytics.totalQuantity,
+        totalOrders: salesAnalytics.totalOrders,
+        averageOrderValue: salesAnalytics.averageOrderValue,
+        dailySales: dailySalesData,
+        channelBreakdown: salesAnalytics.channelBreakdown,
+      },
+      previousPeriod:
+        previousSalesAnalytics ?
+          {
+            totalRevenue: previousSalesAnalytics.totalRevenue,
+            totalQuantity: previousSalesAnalytics.totalQuantity,
+          }
+        : undefined,
+      growthMetrics,
       topProducts: topProducts.map((p) => ({
-        name: p.product?.name || "Unknown Product",
+        name: p.product?.name,
         quantity: p.totalQuantity,
         revenue: p.totalRevenue,
       })),
-      salesByChannel: salesAnalytics.channelBreakdown || {},
-      inventoryMetrics: {
-        totalProducts: products.length,
-        lowStockCount: inventoryMetrics.lowStockCount,
-        totalInventoryValue: inventoryMetrics.totalInventoryValue,
-      },
+      inventoryMetrics,
+      dateRange: dateParams.daysAgo,
+      selectedProduct: products.find((p) => p._id === selectedProductState)
+        ?.name,
     };
 
     try {
       const report = await generateReportAction({
         analyticsData: dataForReport,
       });
+      console.log("Generated report:", report); // ADD THIS FOR DEBUGGING
       setAiReport(report);
       setShowReportModal(true);
     } catch (error) {
@@ -487,33 +157,49 @@ export function Analytics() {
 
   return (
     <div className="space-y-6">
+      {/* Your existing header and controls */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
         <div className="flex space-x-3 items-center">
-          {" "}
-          {/* Added items-center */}
           <button
             onClick={handleGenerateReport}
             disabled={isGeneratingReport || !salesAnalytics}
             className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center space-x-2"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-              <path d="M5 3v4" />
-              <path d="M19 17v4" />
-              <path d="M3 5h4" />
-              <path d="M17 19h4" />
-            </svg>
+            {isGeneratingReport ?
+              <svg
+                className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+            : <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M7 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2V3a1 1 0 10-2 0v1H9V3a1 1 0 00-1-1H7zm0 2h6V3a1 1 0 10-2 0v1H9V3a1 1 0 00-1-1H7v2zm2 4a1 1 0 100-2 1 1 0 000 2zm-3 1a1 1 0 112 0 1 1 0 01-2 0zm10-1a1 1 0 100-2 1 1 0 000 2zM6 14a1 1 0 112 0 1 1 0 01-2 0zm8-1a1 1 0 100-2 1 1 0 000 2zm-4 1a1 1 0 112 0 1 1 0 01-2 0zm-3-3a1 1 0 100-2 1 1 0 000 2zm8-1a1 1 0 100-2 1 1 0 000 2z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            }
             <span>
               {isGeneratingReport ? "Generating..." : "Generate AI Report"}
             </span>
@@ -529,8 +215,8 @@ export function Analytics() {
             <option value="365">Last year</option>
           </select>
           <select
-            value={selectedProductState}
-            onChange={(e) => setSelectedProductState(e.target.value)}
+            value={selectedProductState} // Updated to selectedProductState
+            onChange={(e) => setSelectedProductState(e.target.value)} // Updated to setSelectedProductState
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="">All Products</option>
@@ -820,6 +506,300 @@ export function Analytics() {
           </div>
         </div>
       </div>
+
+      {/* All your existing analytics sections */}
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* Your existing metric cards */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Revenue</p>
+              <p className="text-2xl font-bold text-gray-900">
+                ${salesAnalytics?.totalRevenue?.toFixed(2) || "0.00"}
+              </p>
+            </div>
+            <div className="text-2xl">💰</div>
+          </div>
+          <div className="mt-2">
+            <span
+              className={`text-sm font-medium ${
+                growthMetrics.revenueGrowth >= 0 ?
+                  "text-green-600"
+                : "text-red-600"
+              }`}
+            >
+              {growthMetrics.revenueGrowth >= 0 ? "↗" : "↘"}{" "}
+              {Math.abs(growthMetrics.revenueGrowth).toFixed(1)}%
+            </span>
+            <span className="text-sm text-gray-500 ml-1">
+              vs previous period
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Units Sold</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {salesAnalytics?.totalQuantity || 0}
+              </p>
+            </div>
+            <div className="text-2xl">📦</div>
+          </div>
+          <div className="mt-2">
+            <span
+              className={`text-sm font-medium ${
+                growthMetrics.quantityGrowth >= 0 ?
+                  "text-green-600"
+                : "text-red-600"
+              }`}
+            >
+              {growthMetrics.quantityGrowth >= 0 ? "↗" : "↘"}{" "}
+              {Math.abs(growthMetrics.quantityGrowth).toFixed(1)}%
+            </span>
+            <span className="text-sm text-gray-500 ml-1">
+              vs previous period
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Orders</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {salesAnalytics?.totalOrders || 0}
+              </p>
+            </div>
+            <div className="text-2xl">🛒</div>
+          </div>
+          <div className="mt-2">
+            <span className="text-sm text-gray-500">
+              {Math.round(
+                ((salesAnalytics?.totalOrders || 0) / dateParams.daysAgo) * 10
+              ) / 10}{" "}
+              orders/day avg
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">
+                Avg Order Value
+              </p>
+              <p className="text-2xl font-bold text-gray-900">
+                ${salesAnalytics?.averageOrderValue?.toFixed(2) || "0.00"}
+              </p>
+            </div>
+            <div className="text-2xl">📊</div>
+          </div>
+          <div className="mt-2">
+            <span className="text-sm text-gray-500">
+              Per transaction average
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Sales Trend Chart */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            📈 Daily Sales Trend
+          </h2>
+          {dailySalesData.length > 0 ?
+            <div className="space-y-2">
+              {dailySalesData.slice(-10).map(([date, data]) => {
+                const maxRevenue = Math.max(
+                  ...dailySalesData.map(([, d]) => (d as any).revenue)
+                );
+                const percentage =
+                  maxRevenue > 0 ?
+                    ((data as any).revenue / maxRevenue) * 100
+                  : 0;
+
+                return (
+                  <div key={date} className="flex items-center space-x-3">
+                    <div className="w-20 text-xs text-gray-600">
+                      {new Date(date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </div>
+                    <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
+                      <div
+                        className="bg-blue-500 h-4 rounded-full transition-all duration-300"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                    <div className="w-16 text-xs text-right font-medium">
+                      ${(data as any).revenue.toFixed(0)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          : <p className="text-gray-500">
+              No sales data available for the selected period
+            </p>
+          }
+        </div>
+
+        {/* Channel Performance */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            🎯 Sales by Channel
+          </h2>
+          {salesAnalytics?.channelBreakdown ?
+            <div className="space-y-4">
+              {Object.entries(salesAnalytics.channelBreakdown)
+                .sort(([, a], [, b]) => (b as number) - (a as number))
+                .map(([channel, revenue]) => {
+                  const totalRevenue = salesAnalytics.totalRevenue || 1;
+                  const percentage = ((revenue as number) / totalRevenue) * 100;
+
+                  return (
+                    <div key={channel} className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="capitalize font-medium text-gray-900">
+                          {channel}
+                        </span>
+                        <div className="text-right">
+                          <span className="font-semibold">
+                            ${(revenue as number).toFixed(2)}
+                          </span>
+                          <span className="text-sm text-gray-500 ml-2">
+                            ({percentage.toFixed(1)}%)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          : <p className="text-gray-500">No channel data available</p>}
+        </div>
+      </div>
+
+      {/* Product Performance */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        {/* Your existing product table */}
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          🏆 Product Performance
+        </h2>
+        {topProducts.length > 0 ?
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-3 px-2">Rank</th>
+                  <th className="text-left py-3 px-2">Product</th>
+                  <th className="text-left py-3 px-2">Units Sold</th>
+                  <th className="text-left py-3 px-2">Revenue</th>
+                  <th className="text-left py-3 px-2">Orders</th>
+                  <th className="text-left py-3 px-2">Avg Order Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topProducts.map((item, index) => (
+                  <tr
+                    key={item.productId}
+                    className="border-b hover:bg-gray-50"
+                  >
+                    <td className="py-3 px-2">
+                      <span className="font-bold text-blue-600">
+                        #{index + 1}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {item.product?.name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {item.product?.sku}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="py-3 px-2 font-medium">
+                      {item.totalQuantity}
+                    </td>
+                    <td className="py-3 px-2 font-medium text-green-600">
+                      ${item.totalRevenue.toFixed(2)}
+                    </td>
+                    <td className="py-3 px-2">{item.orderCount}</td>
+                    <td className="py-3 px-2">
+                      {(item.totalQuantity / item.orderCount).toFixed(1)} units
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        : <div className="text-center py-8">
+            <div className="text-4xl mb-4">📊</div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              No sales data
+            </h3>
+            <p className="text-gray-600">
+              Start recording sales to see analytics and insights
+            </p>
+          </div>
+        }
+      </div>
+
+      {/* Inventory Insights */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        {/* Your existing inventory section */}
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          📦 Inventory Insights
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="text-center p-4 bg-blue-50 rounded-lg">
+            <div className="text-2xl mb-2">📈</div>
+            <p className="text-sm text-gray-600">Total Products</p>
+            <p className="text-xl font-bold text-blue-600">{products.length}</p>
+          </div>
+
+          <div className="text-center p-4 bg-yellow-50 rounded-lg">
+            <div className="text-2xl mb-2">⚠️</div>
+            <p className="text-sm text-gray-600">Low Stock Items</p>
+            <p className="text-xl font-bold text-yellow-600">
+              {inventoryMetrics.lowStockCount}
+            </p>
+          </div>
+
+          <div className="text-center p-4 bg-green-50 rounded-lg">
+            <div className="text-2xl mb-2">💰</div>
+            <p className="text-sm text-gray-600">Total Inventory Value</p>
+            <p className="text-xl font-bold text-green-600">
+              ${inventoryMetrics.totalInventoryValue.toFixed(2)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* MOVE THE MODAL HERE - AT THE END OF THE COMPONENT */}
+      {showReportModal && aiReport && (
+        <AIReportModal
+          report={aiReport}
+          onClose={() => {
+            setShowReportModal(false);
+            setAiReport(null); // Optional: clear the report
+          }}
+        />
+      )}
     </div>
   );
 }
