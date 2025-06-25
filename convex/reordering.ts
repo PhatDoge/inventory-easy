@@ -8,30 +8,33 @@ import {
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
-// Helper function to get the current user from Clerk
-const getCurrentUser = async (ctx: any) => {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
-    throw new Error("Not authenticated");
-  }
+// Internal query to get the current user
+export const _getCurrentUser = internalQuery({
+  handler: async (ctx: any) => {
+    // TODO: Use proper Convex QueryCtx type e.g. QueryCtx
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
 
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-    .first();
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
 
-  if (!user) {
-    throw new Error("User not found");
-  }
+    if (!user) {
+      throw new Error("User not found");
+    }
 
-  return user;
-};
+    return user;
+  },
+});
 
 // Generate reorder suggestions for user's products
 export const generateReorderSuggestions = action({
   args: {},
   handler: async (ctx) => {
-    const user = await getCurrentUser(ctx);
+    const user = await ctx.runQuery(internal.reordering._getCurrentUser);
 
     // Get all active products for this user
     const products = await ctx.runQuery(
@@ -95,7 +98,7 @@ export const getUserReorderSuggestions = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const user = await getCurrentUser(ctx);
+    const user = await ctx.runQuery(internal.reordering._getCurrentUser);
 
     // Get user's products
     const userProducts = await ctx.db
@@ -165,7 +168,7 @@ export const updateReorderSuggestionStatus = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await getCurrentUser(ctx);
+    const user = await ctx.runQuery(internal.reordering._getCurrentUser);
 
     const suggestion = await ctx.db.get(args.suggestionId);
     if (!suggestion) {
@@ -232,23 +235,25 @@ export const createReorderSuggestion = internalMutation({
 
     if (existingSuggestion) {
       // Update existing suggestion
+      // Note: We don't update createdAt here as it should be immutable.
       return await ctx.db.patch(existingSuggestion._id, {
         suggestedQuantity: args.suggestedQuantity,
         urgency: args.urgency,
         reason: args.reason,
         estimatedStockoutDate: args.estimatedStockoutDate,
         costImpact: args.costImpact,
-        createdAt: Date.now(),
+        // createdAt should not be updated
         updatedAt: Date.now(),
-        updatedBy: args.createdBy,
+        updatedBy: args.createdBy, // The user triggering the generation is considered the updater here
       });
     } else {
       // Create new suggestion
       return await ctx.db.insert("reorderSuggestions", {
-        ...args,
+        ...args, // contains createdBy
         status: "pending",
         createdAt: Date.now(),
-        updatedAt: Date.now(),
+        updatedAt: Date.now(), // Set updatedAt to the same as createdAt initially
+        updatedBy: args.createdBy, // Set updatedBy to createdBy initially
       });
     }
   },

@@ -96,6 +96,9 @@ const applicationTables = {
     costImpact: v.number(),
     status: v.string(), // "pending", "approved", "rejected", "ordered"
     createdAt: v.number(),
+    createdBy: v.id("users"),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
     reviewedBy: v.optional(v.id("users")),
     reviewedAt: v.optional(v.number()),
   })
