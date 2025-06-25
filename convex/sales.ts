@@ -77,6 +77,7 @@ export const getSalesAnalytics = query({
     startDate: v.number(),
     endDate: v.number(),
     productId: v.optional(v.id("products")),
+    cacheBuster: v.optional(v.number()), // Add cacheBuster argument
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);

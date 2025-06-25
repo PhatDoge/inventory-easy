@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { useQuery, useMutation } from "convex/react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react"; // Added useEffect
 import { toast } from "sonner";
 
 export function SalesTracking() {
@@ -11,6 +11,7 @@ export function SalesTracking() {
   const [channel, setChannel] = useState("store");
   const [customerId, setCustomerId] = useState("");
   const [refreshKey, setRefreshKey] = useState(0); // State to trigger refresh
+  const [displayedSales, setDisplayedSales] = useState<any[]>([]); // State for displayed sales
 
   const products = useQuery(api.products.list, {}) || [];
   const recordSale = useMutation(api.sales.recordSale);
@@ -26,6 +27,15 @@ export function SalesTracking() {
     startDate: dateRange.startDate,
     endDate: dateRange.endDate,
   });
+
+  useEffect(() => {
+    if (salesAnalytics?.sales) {
+      const sortedSales = [...salesAnalytics.sales] // Create a new array instance
+        .sort((a, b) => b.saleDate - a.saleDate)
+        .slice(0, 10);
+      setDisplayedSales(sortedSales);
+    }
+  }, [salesAnalytics, refreshKey]); // Depend on salesAnalytics and refreshKey
 
   const topProducts =
     useQuery(api.sales.getTopSellingProducts, {
@@ -208,7 +218,9 @@ export function SalesTracking() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
           📋 Recent Sales
         </h2>
-        {salesAnalytics?.sales && salesAnalytics.sales.length > 0 ?
+        {(
+          displayedSales.length > 0 // Use displayedSales
+        ) ?
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -222,28 +234,26 @@ export function SalesTracking() {
                 </tr>
               </thead>
               <tbody>
-                {salesAnalytics.sales
-                  .sort((a, b) => b.saleDate - a.saleDate)
-                  .slice(0, 10)
-                  .map((sale) => {
-                    const product = products.find(
-                      (p) => p._id === sale.productId
-                    );
-                    return (
-                      <tr key={sale._id} className="border-b">
-                        <td className="py-2">
-                          {new Date(sale.saleDate).toLocaleDateString()}
-                        </td>
-                        <td className="py-2">{product?.name || "Unknown"}</td>
-                        <td className="py-2">{sale.quantity}</td>
-                        <td className="py-2">${sale.unitPrice.toFixed(2)}</td>
-                        <td className="py-2 font-medium">
-                          ${sale.totalAmount.toFixed(2)}
-                        </td>
-                        <td className="py-2 capitalize">{sale.channel}</td>
-                      </tr>
-                    );
-                  })}
+                {displayedSales.map((sale) => {
+                  // Use displayedSales
+                  const product = products.find(
+                    (p) => p._id === sale.productId
+                  );
+                  return (
+                    <tr key={sale._id} className="border-b">
+                      <td className="py-2">
+                        {new Date(sale.saleDate).toLocaleDateString()}
+                      </td>
+                      <td className="py-2">{product?.name || "Unknown"}</td>
+                      <td className="py-2">{sale.quantity}</td>
+                      <td className="py-2">${sale.unitPrice.toFixed(2)}</td>
+                      <td className="py-2 font-medium">
+                        ${sale.totalAmount.toFixed(2)}
+                      </td>
+                      <td className="py-2 capitalize">{sale.channel}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
