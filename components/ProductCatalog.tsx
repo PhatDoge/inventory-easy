@@ -60,15 +60,35 @@ export function ProductCatalog() {
     }
   };
 
-  const handleStockUpdate = async (productId: string, newStock: number) => {
+  // State to manage the input value for adding stock for each product
+  const [stockInputValue, setStockInputValue] = useState<{
+    [productId: string]: string;
+  }>({});
+
+  const handleStockInputChange = (productId: string, value: string) => {
+    setStockInputValue((prev) => ({ ...prev, [productId]: value }));
+  };
+
+  const handleStockUpdate = async (
+    productId: string,
+    quantityToAdd: number
+  ) => {
+    if (isNaN(quantityToAdd) || quantityToAdd === 0) {
+      toast.info("Please enter a valid quantity to add.");
+      return;
+    }
     try {
-      await updateStock({
+      const result = await updateStock({
         productId: productId as any,
-        newStock,
+        quantityChange: quantityToAdd, // Pass quantityToAdd as quantityChange
         movementType: "adjustment",
         notes: "Manual stock adjustment",
       });
-      toast.success("Stock updated successfully!");
+      toast.success(
+        `Stock updated successfully! New stock: ${result.newStockLevel}`
+      );
+      // Clear the input field for this product after successful update
+      handleStockInputChange(productId, "");
     } catch (error) {
       toast.error("Failed to update stock: " + (error as Error).message);
     }
@@ -181,21 +201,33 @@ export function ProductCatalog() {
             <div className="flex space-x-2">
               <input
                 type="number"
-                placeholder="New stock"
+                placeholder="Qty to Add" // Changed placeholder
                 className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm"
+                value={stockInputValue[product._id] || ""}
+                onChange={(e) =>
+                  handleStockInputChange(product._id, e.target.value)
+                }
                 onKeyPress={(e) => {
                   if (e.key === "Enter") {
-                    const newStock = parseInt(
+                    const quantity = parseInt(
                       (e.target as HTMLInputElement).value
                     );
-                    if (!isNaN(newStock)) {
-                      handleStockUpdate(product._id, newStock);
-                      (e.target as HTMLInputElement).value = "";
+                    if (!isNaN(quantity)) {
+                      handleStockUpdate(product._id, quantity);
+                      // Input value is cleared by handleStockUpdate on success
                     }
                   }
                 }}
               />
-              <button className="px-3 py-2 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200">
+              <button
+                onClick={() => {
+                  const quantity = parseInt(
+                    stockInputValue[product._id] || "0"
+                  );
+                  handleStockUpdate(product._id, quantity);
+                }}
+                className="px-3 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600" // Styled button
+              >
                 Update
               </button>
             </div>

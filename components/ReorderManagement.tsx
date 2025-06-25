@@ -25,7 +25,8 @@ interface Suggestion {
 
 export function ReorderManagement() {
   const generateReorders = useAction(api.reordering.generateReorderSuggestions);
-  const updateSuggestionStatus = useMutation(
+  // Changed useMutation to useAction for updateReorderSuggestionStatus
+  const updateSuggestionStatus = useAction(
     api.reordering.updateReorderSuggestionStatus
   );
 

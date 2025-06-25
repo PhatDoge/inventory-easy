@@ -3,10 +3,11 @@ import {
   internalMutation,
   internalQuery,
   query,
-  mutation,
+  mutation, // Will remove this if not used elsewhere after change
+  action, // Added for the new action
 } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api"; // Ensure api is imported
 
 // Internal query to get the current user
 export const _getCurrentUser = internalQuery({
@@ -160,8 +161,8 @@ export const getUserReorderSuggestions = query({
   },
 });
 
-// Update reorder suggestion status
-export const updateReorderSuggestionStatus = mutation({
+// Update reorder suggestion status (now an action)
+export const updateReorderSuggestionStatus = action({
   args: {
     suggestionId: v.id("reorderSuggestions"),
     status: v.string(),
@@ -170,22 +171,103 @@ export const updateReorderSuggestionStatus = mutation({
   handler: async (ctx, args) => {
     const user = await ctx.runQuery(internal.reordering._getCurrentUser);
 
-    const suggestion = await ctx.db.get(args.suggestionId);
+    // It's good practice for actions that modify data to do so via mutations.
+    // So, we'll have an internal mutation to handle the DB write for the suggestion status
+    // and then, if approved, call the products.updateStock mutation.
+
+    const suggestion = await ctx.runQuery(
+      internal.reordering.getSuggestionById,
+      { suggestionId: args.suggestionId }
+    );
+
     if (!suggestion) {
       throw new Error("Reorder suggestion not found");
     }
 
-    // Verify the suggestion belongs to a product owned by the user
-    const product = await ctx.db.get(suggestion.productId);
+    // Verify the suggestion belongs to a product owned by the user (can be done in internal mutation too)
+    const product = await ctx.runQuery(internal.products.getProductOwner, {
+      productId: suggestion.productId,
+    });
     if (!product || product.createdBy !== user._id) {
-      throw new Error("Unauthorized: This suggestion doesn't belong to you");
+      throw new Error(
+        "Unauthorized: This suggestion does not belong to your products or product not found."
+      );
     }
+
+    // Update the suggestion status via an internal mutation
+    await ctx.runMutation(internal.reordering.internalUpdateSuggestionStatus, {
+      suggestionId: args.suggestionId,
+      status: args.status,
+      notes: args.notes,
+      userId: user._id,
+    });
+
+    // If the status is 'approved', update the product stock
+    if (args.status === "approved") {
+      if (!suggestion.suggestedQuantity || suggestion.suggestedQuantity <= 0) {
+        console.warn(
+          `Suggestion ${args.suggestionId} approved, but suggestedQuantity is invalid: ${suggestion.suggestedQuantity}. Stock not updated.`
+        );
+        // Optionally, throw an error or return a specific message
+        return {
+          success: true,
+          message:
+            "Suggestion approved, but stock not updated due to invalid quantity.",
+        };
+      }
+
+      try {
+        await ctx.runMutation(api.products.updateStock, {
+          productId: suggestion.productId,
+          quantityChange: suggestion.suggestedQuantity,
+          movementType: "reorder_approved",
+          notes: `Approved reorder suggestion ${args.suggestionId}`,
+          // reference: args.suggestionId, // Could be useful
+        });
+      } catch (error) {
+        // Log the error and potentially return a partial success message
+        console.error(
+          `Failed to update stock for approved suggestion ${args.suggestionId}:`,
+          error
+        );
+        throw new Error(
+          `Suggestion status updated, but failed to update product stock: ${(error as Error).message}`
+        );
+      }
+    }
+    return { success: true };
+  },
+});
+
+// Internal query to get a suggestion by ID (needed for the action)
+export const getSuggestionById = internalQuery({
+  args: { suggestionId: v.id("reorderSuggestions") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.suggestionId);
+  },
+});
+
+// Internal mutation to update suggestion status (called by the action)
+export const internalUpdateSuggestionStatus = internalMutation({
+  args: {
+    suggestionId: v.id("reorderSuggestions"),
+    status: v.string(),
+    notes: v.optional(v.string()),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    // Basic validation or checks can happen here too
+    const suggestion = await ctx.db.get(args.suggestionId);
+    if (!suggestion) {
+      throw new Error("Reorder suggestion not found for internal update.");
+    }
+    // Potentially re-verify product ownership if needed, though action does it.
 
     return await ctx.db.patch(args.suggestionId, {
       status: args.status,
       notes: args.notes,
       updatedAt: Date.now(),
-      updatedBy: user._id,
+      updatedBy: args.userId,
     });
   },
 });

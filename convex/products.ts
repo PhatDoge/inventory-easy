@@ -111,7 +111,7 @@ export const create = mutation({
 export const updateStock = mutation({
   args: {
     productId: v.id("products"),
-    newStock: v.number(),
+    quantityChange: v.number(), // Changed from newStock to quantityChange
     movementType: v.string(),
     reference: v.optional(v.string()),
     notes: v.optional(v.string()),
@@ -122,25 +122,26 @@ export const updateStock = mutation({
     const product = await ctx.db.get(args.productId);
     if (!product) throw new Error("Product not found");
 
-    const stockDifference = args.newStock - product.currentStock;
+    const newCurrentStock = product.currentStock + args.quantityChange;
 
     // Update product stock
     await ctx.db.patch(args.productId, {
-      currentStock: args.newStock,
+      currentStock: newCurrentStock, // Update with the new calculated stock
     });
 
     // Record stock movement
+    // The 'quantity' field in stockMovements should represent the actual change
     await ctx.db.insert("stockMovements", {
       productId: args.productId,
       type: args.movementType,
-      quantity: stockDifference,
+      quantity: args.quantityChange, // This is the actual amount added or removed
       reference: args.reference,
       notes: args.notes,
       movementDate: Date.now(),
       createdBy: user._id,
     });
 
-    return { success: true };
+    return { success: true, newStockLevel: newCurrentStock }; // Optionally return the new stock level
   },
 });
 
@@ -206,5 +207,17 @@ export const getProductDetails = query({
           recentSales.reduce((sum, sale) => sum + sale.quantity, 0) / 30
         : 0,
     };
+  },
+});
+
+// Internal query to get product owner (used by reordering action)
+export const getProductOwner = internalQuery({
+  args: { productId: v.id("products") },
+  handler: async (ctx, args) => {
+    const product = await ctx.db.get(args.productId);
+    if (!product) {
+      return null; // Or throw new Error("Product not found");
+    }
+    return { createdBy: product.createdBy };
   },
 });
