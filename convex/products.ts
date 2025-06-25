@@ -1,4 +1,4 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 // Helper function to get the current user from Clerk
@@ -111,7 +111,7 @@ export const create = mutation({
 export const updateStock = mutation({
   args: {
     productId: v.id("products"),
-    quantityChange: v.number(), // Changed from newStock to quantityChange
+    newStock: v.float64(), // Reverted to newStock based on error
     movementType: v.string(),
     reference: v.optional(v.string()),
     notes: v.optional(v.string()),
@@ -122,26 +122,30 @@ export const updateStock = mutation({
     const product = await ctx.db.get(args.productId);
     if (!product) throw new Error("Product not found");
 
-    const newCurrentStock = product.currentStock + args.quantityChange;
+    // Validate newStock value
+    if (args.newStock < 0) {
+      throw new Error("New stock level cannot be negative.");
+    }
+
+    const quantityChange = args.newStock - product.currentStock;
 
     // Update product stock
     await ctx.db.patch(args.productId, {
-      currentStock: newCurrentStock, // Update with the new calculated stock
+      currentStock: args.newStock, // Update with the provided new stock level
     });
 
     // Record stock movement
-    // The 'quantity' field in stockMovements should represent the actual change
     await ctx.db.insert("stockMovements", {
       productId: args.productId,
       type: args.movementType,
-      quantity: args.quantityChange, // This is the actual amount added or removed
+      quantity: quantityChange, // This is the calculated change in quantity
       reference: args.reference,
       notes: args.notes,
       movementDate: Date.now(),
       createdBy: user._id,
     });
 
-    return { success: true, newStockLevel: newCurrentStock }; // Optionally return the new stock level
+    return { success: true, newStockLevel: args.newStock }; // Return the new stock level
   },
 });
 

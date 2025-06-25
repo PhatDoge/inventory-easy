@@ -208,7 +208,6 @@ export const updateReorderSuggestionStatus = action({
         console.warn(
           `Suggestion ${args.suggestionId} approved, but suggestedQuantity is invalid: ${suggestion.suggestedQuantity}. Stock not updated.`
         );
-        // Optionally, throw an error or return a specific message
         return {
           success: true,
           message:
@@ -216,16 +215,46 @@ export const updateReorderSuggestionStatus = action({
         };
       }
 
+      // Get current product stock
+      const productDetails = await ctx.runQuery(
+        api.products.getProductDetails,
+        {
+          productId: suggestion.productId,
+        }
+      );
+
+      if (!productDetails || !productDetails.product) {
+        console.error(
+          `Failed to fetch product details for product ID ${suggestion.productId} when approving suggestion ${args.suggestionId}.`
+        );
+        throw new Error(
+          "Suggestion status updated, but failed to update product stock: Product details not found."
+        );
+      }
+
+      const currentStock = productDetails.product.currentStock;
+      const newStock = currentStock + suggestion.suggestedQuantity;
+
+      if (newStock < 0) {
+        // This case should ideally not happen if suggestedQuantity is positive,
+        // but as a safeguard if currentStock was unexpectedly negative or quantity was negative.
+        console.error(
+          `Approving suggestion ${args.suggestionId} for product ${suggestion.productId} would result in negative stock (${newStock}). Aborting stock update.`
+        );
+        throw new Error(
+          "Suggestion status updated, but failed to update product stock: Resulting stock would be negative."
+        );
+      }
+
       try {
         await ctx.runMutation(api.products.updateStock, {
           productId: suggestion.productId,
-          quantityChange: suggestion.suggestedQuantity,
+          newStock: newStock, // Pass the calculated newStock
           movementType: "reorder_approved",
           notes: `Approved reorder suggestion ${args.suggestionId}`,
-          // reference: args.suggestionId, // Could be useful
+          // reference: args.suggestionId,
         });
       } catch (error) {
-        // Log the error and potentially return a partial success message
         console.error(
           `Failed to update stock for approved suggestion ${args.suggestionId}:`,
           error

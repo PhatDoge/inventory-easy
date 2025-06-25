@@ -73,14 +73,29 @@ export function ProductCatalog() {
     productId: string,
     quantityToAdd: number
   ) => {
-    if (isNaN(quantityToAdd) || quantityToAdd === 0) {
-      toast.info("Please enter a valid quantity to add.");
+    if (isNaN(quantityToAdd)) {
+      // Allow quantityToAdd to be 0 for potential stock resets if needed, or negative for decreases
+      toast.info("Please enter a valid quantity.");
       return;
     }
+
+    const product = products.find((p) => p._id === productId);
+    if (!product) {
+      toast.error("Product not found. Cannot update stock.");
+      return;
+    }
+
+    const newStock = product.currentStock + quantityToAdd;
+
+    if (newStock < 0) {
+      toast.error("Resulting stock level cannot be negative.");
+      return;
+    }
+
     try {
       const result = await updateStock({
-        productId: productId as any,
-        quantityChange: quantityToAdd, // Pass quantityToAdd as quantityChange
+        productId: productId as any, // Assuming productId is Id<"products">
+        newStock: newStock, // Pass the calculated newStock
         movementType: "adjustment",
         notes: "Manual stock adjustment",
       });
