@@ -11,7 +11,6 @@ export function SalesTracking() {
   const [channel, setChannel] = useState("store");
   const [customerId, setCustomerId] = useState("");
   const [refreshKey, setRefreshKey] = useState(0); // State to trigger refresh
-  const [displayedSales, setDisplayedSales] = useState<any[]>([]); // State for displayed sales
 
   const products = useQuery(api.products.list, {}) || [];
   const recordSale = useMutation(api.sales.recordSale);
@@ -26,16 +25,15 @@ export function SalesTracking() {
   const salesAnalytics = useQuery(api.sales.getSalesAnalytics, {
     startDate: dateRange.startDate,
     endDate: dateRange.endDate,
+    cacheBuster: refreshKey, // Keep cacheBuster for general analytics refresh
   });
 
-  useEffect(() => {
-    if (salesAnalytics?.sales) {
-      const sortedSales = [...salesAnalytics.sales] // Create a new array instance
-        .sort((a, b) => b.saleDate - a.saleDate)
-        .slice(0, 10);
-      setDisplayedSales(sortedSales);
-    }
-  }, [salesAnalytics, refreshKey]); // Depend on salesAnalytics and refreshKey
+  // New query for recent sales, fetches 20, displays 10.
+  const recentSalesData =
+    useQuery(api.sales.getRecentSales, {
+      limit: 20, // Query in sales.ts defaults to 20, this is illustrative
+      cacheBuster: refreshKey,
+    }) || [];
 
   const topProducts =
     useQuery(api.sales.getTopSellingProducts, {
@@ -219,7 +217,7 @@ export function SalesTracking() {
           📋 Recent Sales
         </h2>
         {(
-          displayedSales.length > 0 // Use displayedSales
+          recentSalesData.length > 0 // Use recentSalesData
         ) ?
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -234,8 +232,8 @@ export function SalesTracking() {
                 </tr>
               </thead>
               <tbody>
-                {displayedSales.map((sale) => {
-                  // Use displayedSales
+                {recentSalesData.slice(0, 10).map((sale: any) => {
+                  // Use recentSalesData, slice, and add type for sale
                   const product = products.find(
                     (p) => p._id === sale.productId
                   );

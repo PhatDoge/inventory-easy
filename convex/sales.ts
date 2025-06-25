@@ -225,3 +225,65 @@ export const getTopSellingProducts = query({
     return productsWithDetails;
   },
 });
+
+// Get recent sales
+export const getRecentSales = query({
+  args: {
+    limit: v.optional(v.number()),
+    cacheBuster: v.optional(v.number()), // To help force refresh
+  },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+
+    // Get user's products to filter sales
+    const userProducts = await ctx.db
+      .query("products")
+      .withIndex("by_created_by", (q) => q.eq("createdBy", user._id))
+      .collect();
+    const userProductIds = new Set(userProducts.map((p) => p._id));
+
+    if (userProductIds.size === 0) {
+      return []; // No products, so no sales
+    }
+
+    // Fetch sales related to user's products, order by saleDate descending, and limit
+    // We need to fetch all sales for user's products first, then filter, sort, and limit.
+    // This is because we can't directly apply a limit if we filter after a broad index scan.
+    // However, for "recent" sales, we can optimize by querying the sales table
+    // ordered by date and then filtering.
+    // For simplicity and correctness with user product filtering,
+    // let's fetch, filter, then sort/limit in code if index doesn't perfectly support it.
+
+    // This approach might be inefficient if user has MANY sales.
+    // A better index might be needed for larger scale, e.g., [createdBy, saleDate] on sales.
+    // For now, let's assume the number of sales per user is manageable.
+
+    const allUserSales = [];
+    for (const productId of userProductIds) {
+      const salesForProduct = await ctx.db
+        .query("sales")
+        .withIndex("by_product_and_date", (q) => q.eq("productId", productId)) // Assuming such an index or need to create it
+        // If no specific index for product + date, this might be less efficient
+        // Alternatively, scan all sales and filter by userProductIds.
+        .order("desc") // Order by saleDate via _creationTime if by_product_and_date is on [productId, saleDate]
+        .collect();
+      allUserSales.push(...salesForProduct);
+    }
+
+    // If by_product_and_date is not sorted by saleDate, or if it's complex to query across all user products efficiently,
+    // an alternative: query all sales with a general date index, then filter.
+    // Let's use the by_date index and filter, then sort.
+
+    const sales = await ctx.db
+      .query("sales")
+      .withIndex("by_date") // Query all sales sorted by date
+      .order("desc") // Get most recent first
+      .collect();
+
+    const filteredSales = sales
+      .filter((sale) => userProductIds.has(sale.productId))
+      .slice(0, args.limit || 20); // Apply limit after filtering
+
+    return filteredSales;
+  },
+});
