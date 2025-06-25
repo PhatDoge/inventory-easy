@@ -259,12 +259,13 @@ export const createReorderSuggestion = internalMutation({
   },
 });
 
-// Calculate reorder suggestion logic (unchanged)
+// Calculate reorder suggestion logic (updated for new critical definition)
 function calculateReorderSuggestion(product: any, forecast: any) {
   const currentStock = product.currentStock;
   const reorderPoint = product.reorderPoint;
   const leadTimeDays = product.leadTimeDays;
   const maxStockLevel = product.maxStockLevel;
+  const LOW_STOCK_THRESHOLD = 5; // Define a constant for clarity
 
   // Default daily demand if no forecast available
   let dailyDemand = 1;
@@ -277,15 +278,18 @@ function calculateReorderSuggestion(product: any, forecast: any) {
   const safetyStock = leadTimeDemand * 0.2;
 
   // Calculate days until stockout
-  const daysUntilStockout = currentStock / dailyDemand;
+  // Ensure dailyDemand is not zero to prevent division by zero if currentStock is positive.
+  // If dailyDemand is zero and stock is positive, daysUntilStockout is effectively infinite.
+  const daysUntilStockout =
+    dailyDemand > 0 ? currentStock / dailyDemand : Infinity;
 
-  // Determine if reorder is needed
   let shouldReorder = false;
-  let urgency = "low";
+  let urgency = "low"; // Default urgency
   let reason = "";
   let suggestedQuantity = 0;
   let estimatedStockoutDate: number | undefined;
 
+  // Priority 1: Out of stock OR very low stock (below threshold)
   if (currentStock <= 0) {
     shouldReorder = true;
     urgency = "critical";
@@ -294,34 +298,76 @@ function calculateReorderSuggestion(product: any, forecast: any) {
       product.reorderQuantity,
       leadTimeDemand + safetyStock
     );
-    estimatedStockoutDate = Date.now();
-  } else if (currentStock <= reorderPoint) {
+    estimatedStockoutDate = Date.now(); // Stockout is now
+  } else if (currentStock < LOW_STOCK_THRESHOLD) {
+    // Item is not out of stock, but below the defined low stock threshold
     shouldReorder = true;
-    urgency = daysUntilStockout <= leadTimeDays ? "high" : "medium";
+    urgency = "critical"; // Mark as critical due to low stock
+    reason = `Critically low stock (below ${LOW_STOCK_THRESHOLD} units)`;
+    // Suggest reordering up to max stock level or at least reorder quantity / lead time demand + safety
+    suggestedQuantity = Math.max(
+      product.reorderQuantity,
+      maxStockLevel - currentStock,
+      leadTimeDemand + safetyStock
+    );
+    if (daysUntilStockout !== Infinity) {
+      estimatedStockoutDate =
+        Date.now() + daysUntilStockout * 24 * 60 * 60 * 1000;
+    }
+  }
+  // Priority 2: Stock below reorder point (and not already critical due to very low stock)
+  else if (currentStock <= reorderPoint) {
+    shouldReorder = true;
+    // If projected stockout is within lead time, it's high urgency. Otherwise, medium.
+    urgency =
+      daysUntilStockout !== Infinity && daysUntilStockout <= leadTimeDays ?
+        "high"
+      : "medium";
     reason = `Stock below reorder point (${reorderPoint})`;
     suggestedQuantity = Math.max(
       product.reorderQuantity,
       maxStockLevel - currentStock
     );
-    estimatedStockoutDate =
-      Date.now() + daysUntilStockout * 24 * 60 * 60 * 1000;
-  } else if (daysUntilStockout <= leadTimeDays + 2) {
+    if (daysUntilStockout !== Infinity) {
+      estimatedStockoutDate =
+        Date.now() + daysUntilStockout * 24 * 60 * 60 * 1000;
+    }
+  }
+  // Priority 3: Projected stockout soon (even if above reorder point, and not critical/high)
+  else if (
+    daysUntilStockout !== Infinity &&
+    daysUntilStockout <= leadTimeDays + 2
+  ) {
     shouldReorder = true;
     urgency = "medium";
-    reason = `Projected stockout within lead time (${Math.round(daysUntilStockout)} days)`;
-    suggestedQuantity = leadTimeDemand + safetyStock;
+    reason = `Projected stockout within lead time + 2 days (${Math.round(daysUntilStockout)} days)`;
+    suggestedQuantity = leadTimeDemand + safetyStock; // Suggest covering lead time demand + safety
     estimatedStockoutDate =
       Date.now() + daysUntilStockout * 24 * 60 * 60 * 1000;
   }
 
   // Calculate cost impact
   const stockoutCost =
-    product.sellingPrice *
-    dailyDemand *
-    Math.max(0, leadTimeDays - daysUntilStockout);
-  const carryingCost =
-    ((product.unitCost * suggestedQuantity * 0.25) / 365) * leadTimeDays; // 25% annual carrying cost
-  const costImpact = shouldReorder ? carryingCost : stockoutCost;
+    daysUntilStockout !== Infinity ?
+      product.sellingPrice *
+      dailyDemand *
+      Math.max(0, leadTimeDays - daysUntilStockout)
+    : 0; // No stockout cost if demand is 0 or daysUntilStockout is infinite
+
+  // const carryingCost =
+  //   ((product.unitCost * suggestedQuantity * 0.25) / 365) * leadTimeDays; // 25% annual carrying cost
+
+  let finalCostImpact = 0;
+  if (shouldReorder) {
+    finalCostImpact = suggestedQuantity * product.unitCost; // Cost of the suggested order
+  } else if (
+    currentStock > 0 &&
+    dailyDemand > 0 &&
+    daysUntilStockout <= leadTimeDays
+  ) {
+    // Potential stockout if no action taken
+    finalCostImpact = stockoutCost;
+  }
 
   return {
     shouldReorder,
@@ -329,6 +375,6 @@ function calculateReorderSuggestion(product: any, forecast: any) {
     urgency,
     reason,
     estimatedStockoutDate,
-    costImpact: Math.round(costImpact * 100) / 100,
+    costImpact: Math.round(finalCostImpact * 100) / 100,
   };
 }

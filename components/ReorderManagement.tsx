@@ -1,27 +1,69 @@
 import { api } from "@/convex/_generated/api";
 import { useAction, useQuery, useMutation } from "convex/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { CriticalItemsModal } from "./CriticalItemsModal"; // Import the new modal
+
+// Define the type for a suggestion, ensuring all necessary fields are included
+interface Suggestion {
+  _id: string;
+  product?: {
+    _id: string;
+    name?: string | null;
+    currentStock?: number | null;
+    reorderPoint?: number | null;
+    unitCost?: number | null;
+  } | null;
+  suggestedQuantity?: number | null;
+  urgency: string;
+  status: string;
+  reason?: string | null;
+  costImpact?: number | null;
+  estimatedStockoutDate?: number | null;
+  notes?: string | null;
+}
 
 export function ReorderManagement() {
   const generateReorders = useAction(api.reordering.generateReorderSuggestions);
-  // Changed from useAction to useMutation
   const updateSuggestionStatus = useMutation(
     api.reordering.updateReorderSuggestionStatus
   );
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [filter, setFilter] = useState({ status: "", urgency: "" });
+  const [isCriticalItemsModalOpen, setIsCriticalItemsModalOpen] =
+    useState(false); // State for modal visibility
 
-  // Fetch real reorder suggestions from your backend
   const reorderSuggestions = useQuery(
     api.reordering.getUserReorderSuggestions,
     {
       status: filter.status || undefined,
       urgency: filter.urgency || undefined,
-      limit: 50, // reasonable limit to prevent performance issues
+      limit: 50,
     }
-  );
+  ) as Suggestion[] | undefined; // Cast to Suggestion[] or undefined
+
+  // Effect to show toast for low quantity items
+  useEffect(() => {
+    if (reorderSuggestions) {
+      reorderSuggestions.forEach((suggestion) => {
+        if (
+          suggestion.product &&
+          suggestion.product.currentStock !== null &&
+          suggestion.product.currentStock !== undefined &&
+          suggestion.product.currentStock < 5
+        ) {
+          toast.error(
+            `Low stock for ${suggestion.product.name || "Unknown Product"}! Current stock: ${suggestion.product.currentStock}`,
+            {
+              duration: 5000, // Keep toast visible for 5 seconds
+              id: `low-stock-${suggestion.product._id}`, // Prevent duplicate toasts for the same product
+            }
+          );
+        }
+      });
+    }
+  }, [reorderSuggestions]); // Re-run when suggestions change
 
   const handleGenerateReorders = async () => {
     setIsGenerating(true);
@@ -57,13 +99,14 @@ export function ReorderManagement() {
   };
 
   // Fallback to empty array if data is still loading
-  const suggestions = reorderSuggestions || [];
+  const suggestions: Suggestion[] = reorderSuggestions || [];
 
   // Calculate summary statistics with fallbacks
   const totalSuggestions = suggestions.length;
-  const criticalItems = suggestions.filter(
-    (s) => s.urgency === "critical"
-  ).length;
+  const criticalItemsList = suggestions.filter(
+    (s) => s.urgency?.toLowerCase() === "critical" // Case-insensitive filter
+  );
+  const criticalItemsCount = criticalItemsList.length;
   const highPriorityItems = suggestions.filter(
     (s) => s.urgency === "high"
   ).length;
@@ -71,6 +114,9 @@ export function ReorderManagement() {
     (sum, s) => sum + (s.costImpact || 0),
     0
   );
+
+  const openCriticalItemsModal = () => setIsCriticalItemsModalOpen(true);
+  const closeCriticalItemsModal = () => setIsCriticalItemsModalOpen(false);
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
@@ -199,14 +245,19 @@ export function ReorderManagement() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div
+          className="bg-white p-6 rounded-lg shadow cursor-pointer hover:bg-red-50 transition-colors"
+          onClick={openCriticalItemsModal} // Add click handler
+        >
           <div className="flex items-center">
             <div className="text-2xl mr-3">🚨</div>
             <div>
               <p className="text-sm font-medium text-gray-600">
                 Critical Items
               </p>
-              <p className="text-2xl font-bold text-red-600">{criticalItems}</p>
+              <p className="text-2xl font-bold text-red-600">
+                {criticalItemsCount}
+              </p>
             </div>
           </div>
         </div>
@@ -398,20 +449,20 @@ export function ReorderManagement() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <button
             onClick={() => {
-              const criticalSuggestions = suggestions.filter(
+              const criticalSuggestionsToApprove = suggestions.filter(
                 (s) => s.urgency === "critical" && s.status === "pending"
               );
-              criticalSuggestions.forEach((s) =>
+              criticalSuggestionsToApprove.forEach((s) =>
                 handleUpdateStatus(s._id, "approved")
               );
             }}
-            disabled={criticalItems === 0}
+            disabled={criticalItemsCount === 0}
             className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors disabled:opacity-50"
           >
             <div className="text-2xl mb-2">✅</div>
             <p className="font-medium">Approve All Critical</p>
             <p className="text-sm text-gray-600">
-              Approve all critical reorder suggestions ({criticalItems})
+              Approve all critical reorder suggestions ({criticalItemsCount})
             </p>
           </button>
 
@@ -453,6 +504,14 @@ export function ReorderManagement() {
           <li>• Monitor cost impact to optimize inventory investment</li>
         </ul>
       </div>
+
+      {/* Critical Items Modal */}
+      {isCriticalItemsModalOpen && (
+        <CriticalItemsModal
+          items={criticalItemsList}
+          onClose={closeCriticalItemsModal}
+        />
+      )}
     </div>
   );
 }
