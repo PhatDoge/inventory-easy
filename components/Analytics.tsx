@@ -1,7 +1,7 @@
 "use client";
 import { api } from "@/convex/_generated/api";
 import { useAction, useQuery } from "convex/react"; // Added useAction
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react"; // Added useEffect
 import { toast } from "sonner";
 import { AIReportModal } from "./AIReportModal";
 import { AIReportList } from "./AIReportList"; // Import the new component
@@ -98,6 +98,26 @@ export function Analytics() {
     // and filtering by date range is already applied.
     // We might re-introduce a limit later if performance becomes an issue with very large datasets.
   }, [salesAnalytics?.dailySales]);
+
+  useEffect(() => {
+    console.log(
+      "Analytics.tsx: salesAnalytics.dailySales changed or component updated.",
+      {
+        selectedProduct: selectedProductState || "All Products",
+        dailySalesFromBackend: salesAnalytics?.dailySales,
+      }
+    );
+  }, [salesAnalytics?.dailySales, selectedProductState]);
+
+  useEffect(() => {
+    console.log(
+      "Analytics.tsx: dailySalesData (for chart) changed or component updated.",
+      {
+        selectedProduct: selectedProductState || "All Products",
+        dailySalesForChart: dailySalesData,
+      }
+    );
+  }, [dailySalesData, selectedProductState]);
 
   const channelChartData = useMemo(() => {
     if (!salesAnalytics?.channelBreakdown) return [];
